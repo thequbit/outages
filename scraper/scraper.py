@@ -1,6 +1,7 @@
 
 import datetime
 import json
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -75,7 +76,6 @@ def get_town_count(county, url):
                     datetime=datetime.datetime.utcnow(),
                 )
             )
-            print('\t' + town)
         i += 1
     return counts
 
@@ -86,9 +86,7 @@ def get_town_counts(county_counts):
     for i in range(0, len(county_counts)):
         url = county_counts[i]['url']
         county = county_counts[i]['county']
-        print(county + ':')
         town_count = get_town_count(county, url)
-        print(type(town_count))
         county_counts[i]['town_counts'].append(town_count)
         town_counts.append(town_count)
     return county_counts, town_counts
@@ -108,10 +106,20 @@ def push_to_mongo(county_counts, town_counts):
 
 if __name__ == '__main__':
 
-    county_counts = get_county_counts()
+    i = 0
+    #while(1):
+    if True:
 
-    county_counts, town_counts = get_town_counts(county_counts)
+        county_counts = get_county_counts()
 
-    push_to_mongo(county_counts, town_counts)
+        county_counts, town_counts = get_town_counts(county_counts)
 
+        push_to_mongo(county_counts, town_counts)
 
+        print("success")
+
+        time.sleep(30)
+
+        print(i)
+
+        i += 1
