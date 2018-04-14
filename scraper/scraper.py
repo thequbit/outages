@@ -11,7 +11,14 @@ import pymongo
 root_url = 'http://ebiz1.rge.com/OutageReports/'
 base_url = root_url + 'RGE.html'
 
+# zomg i hate that this is global but it's too 
+# late to give a fuck
+all_streets = []
+
+
 def get_county_counts():
+
+    #print("Getting county counts .", end='')
 
     counts = []
 
@@ -43,9 +50,71 @@ def get_county_counts():
                 )
             )
         i += 1
+        #print(".", end='')
+    #print(" done")
     return counts
 
+def get_streets_from_sub_town_url(county_name, town_name, url):
+
+    streets = []
+
+    resp = requests.get(url)
+    html = resp.text
+
+    soup = BeautifulSoup(html, 'html.parser')
+    trs = soup.find_all('tr')
+
+    i = 0
+    for tr in trs:
+        if i > 2:
+            tds = tr.find_all('td')
+            if len(tds) > 0:
+                #print(tds[0])
+                if '<a href' in str(tds[0]):
+                    _url = tds[0].find('a').get('href')
+                    _streets = get_streets_from_sub_town_url(county_name, town_name, '%s%s' %(root_url, _url))
+                    for _street in _streets:
+                        all_streets.append(
+                            dict(
+                                county=county_name,
+                                town=town_name,
+                                street=_street
+                            )
+                        )
+                else:
+                    _street = tds[0].text
+                    print('%s, %s, %s' % (county_name, town_name, _street))
+                    #streets.append(street)
+                    all_streets.append(
+                        dict(
+                            county=county_name,
+                            town=town_name,
+                            street=_street
+                        )
+                    )
+        i += 1
+
+    return streets
+
+def get_streets_from_town_url(county_name, town_name, url):
+
+    streets = []
+
+    resp = requests.get(url)
+    html = resp.text
+
+    soup = BeautifulSoup(html, 'html.parser')
+    links = soup.find_all('a')
+    
+    for link in links:
+        _url = link.get('href')
+        _streets = get_streets_from_sub_town_url(county_name, town_name, '%s%s' %(root_url, _url)) 
+
+    return streets
+
 def get_town_count(county, url):
+
+    #print("Getting town count .", end='')
 
     counts = []
 
@@ -58,16 +127,17 @@ def get_town_count(county, url):
     for tr in trs:
         tds = tr.find_all('td')
         if i > 2 and len(tds) > 2:
-            url = tds[0].find('a').get('href')
+            _url = tds[0].find('a').get('href')
             town = tds[0].find('a').text
             town_proper = town[0] + town.lower()[1:]
+            streets = get_streets_from_town_url(county, town_proper, '%s%s' %(root_url, _url)) 
             customers = float(tds[1].text.replace(',',''))
             without_power = float(tds[2].text.replace(',',''))
             percent = (customers-without_power)/customers
             counts.append(
                 dict(
                     county=county,
-                    url='%s%s' % (root_url, url),
+                    url='%s%s' % (root_url, _url),
                     town=town,
                     town_proper=town_proper,
                     customers=customers,
@@ -77,6 +147,10 @@ def get_town_count(county, url):
                 )
             )
         i += 1
+        #print(".", end='')
+
+    #print(" done.")
+
     return counts
 
 def get_town_counts(county_counts):
@@ -93,6 +167,8 @@ def get_town_counts(county_counts):
 
 def push_to_mongo(county_counts, town_counts):
 
+    print("Pushing to mongo ... ", end='')
+
     conn = pymongo.MongoClient('localhost', 27017)
     db = conn.outages
     county_counts_db = db['county_counts']
@@ -104,6 +180,8 @@ def push_to_mongo(county_counts, town_counts):
     for town_count in town_counts:
         town_counts_db.insert(town_count)
 
+    print("done.")
+
 if __name__ == '__main__':
 
     i = 0
@@ -114,12 +192,21 @@ if __name__ == '__main__':
 
         county_counts, town_counts = get_town_counts(county_counts)
 
-        push_to_mongo(county_counts, town_counts)
+        #for street in all_streets:
+        #    print
 
-        print("success")
+        with open('streets.csv', 'w') as f:
+            for street in all_streets:
+                f.write('%s\t %s\t %s\r\n' % (street['county'], street['town'], street['street']))
 
-        time.sleep(30)
+        #print(json.dumps(all_streets, indent=4))
 
-        print(i)
+        #push_to_mongo(county_counts, town_counts)
 
-        i += 1
+        #print("success")
+
+        #time.sleep(30)
+
+        #print(i)
+
+        #i += 1
